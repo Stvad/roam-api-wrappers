@@ -1,0 +1,26 @@
+{
+  "name": "roam-api-wrappers",
+  "version": "0.1.0",
+  "description": "High level API wrappers for RoamResearch API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": "git@github.com:Stvad/roam-api-wrappers.git",
+  "author": "Vlad Sitalo",
+  "license": "Apache-2.0",
+  "private": false,
+  "devDependencies": {
+    "typescript": "^4.8.2",
+    "@types/lodash": "^4.14.184"
+  },
+  "scripts": {
+    "build": "npm run clean && npm run compile",
+    "clean": "rm -rf dist",
+    "compile": "tsc",
+    "prepublishOnly": "npm run build",
+    "watch": "npm run compile -- --watch"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21",
+    "roamjs-components": "^0.72.9"
+  }
+}
