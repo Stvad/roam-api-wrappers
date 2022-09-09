@@ -1,7 +1,8 @@
 import {RawRoamBlock, RawRoamPage, RoamNode} from './raw-types'
 import {Navigation} from './common/navigation'
 
-import * as _ from 'lodash'
+import {countBy} from 'lodash-es'
+
 import getBlockUidsReferencingPage from 'roamjs-components/queries/getBlockUidsReferencingPage'
 
 export const Roam = {
@@ -190,7 +191,7 @@ export class Attribute extends Page {
 
     getValuesByCount() {
         const allValues = this.getAllValues()
-        return Object.entries(_.countBy(allValues))
+        return Object.entries(countBy(allValues))
             .sort(([, a], [, b]) => (a as number) - (b as number)).reverse()
     }
 
