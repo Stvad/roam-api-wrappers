@@ -135,9 +135,10 @@ export abstract class RoamEntity {
         this.text = createAttributeString(name, value)
     }
 
-    appendChild(text: string) {
+    async appendChild(text: string): Promise<string> {
         //todo return new uid?
-        window.roamAlphaAPI.createBlock({
+        const uid = window.roamAlphaAPI.util.generateUID()
+        await window.roamAlphaAPI.createBlock({
             location: {
                 'parent-uid': this.uid,
                 //todo is this append?
@@ -145,8 +146,10 @@ export abstract class RoamEntity {
             },
             block: {
                 string: text,
+                uid,
             },
         })
+        return uid
     }
 }
 
