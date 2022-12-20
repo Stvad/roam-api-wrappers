@@ -77,6 +77,10 @@ export abstract class RoamEntity {
         return Navigation.urlForUid(this.uid)
     }
 
+    get createdTime(): number {
+        return this.rawEntity[':create/time']
+    }
+
     /**
      * The desired effect is to be able to get child blocks either by content or by order
      * block[number] would give you children by order (block[0] is a first child)
@@ -99,14 +103,32 @@ export abstract class RoamEntity {
         }
     }
 
-    childWithValue(content: string) {
-        return this.children?.find(it => it.text === content)
+    childWithIndexOrValue(indexOrValue: string): Block | null {
+        const idx = parseInt(indexOrValue)
+        if (Number.isInteger(idx)) return this.children?.[idx]
+
+        return this.childWithValue(indexOrValue)
     }
 
-    childAtPath(path: string[]) {
-        return path.reduce(
-            (block: RoamEntity | undefined, pathElement: string) =>
-                block?.child(pathElement) as (RoamEntity | undefined), this)
+    childWithValue(content: string): Block | null {
+        return this.children?.find(it => it.text === content) ?? null
+    }
+
+    async childAtPath(path: string[], createIfMissing = false): Promise<Block | null> {
+        let block: Block | RoamEntity = this
+        for (const part of path) {
+            const existing: Block | null =  block.childWithIndexOrValue(part)
+            if (existing) {
+                block = existing
+                continue
+            }
+
+            if (!createIfMissing) return null
+
+            block = await block.appendChild(part)
+        }
+
+        return block as Block
     }
 
     childrenMatching(regex: RegExp) {
@@ -128,15 +150,14 @@ export abstract class RoamEntity {
             return
         }
 
-        this.appendChild(createAttributeString(name, value))
+        return this.appendChild(createAttributeString(name, value))
     }
 
     setAsAttribute(name: string, value: string) {
         this.text = createAttributeString(name, value)
     }
 
-    async appendChild(text: string): Promise<string> {
-        //todo return new uid?
+    async appendChild(text: string): Promise<Block> {
         const uid = window.roamAlphaAPI.util.generateUID()
         await window.roamAlphaAPI.createBlock({
             location: {
@@ -149,7 +170,7 @@ export abstract class RoamEntity {
                 uid,
             },
         })
-        return uid
+        return Block.fromUid(uid)!
     }
 }
 
