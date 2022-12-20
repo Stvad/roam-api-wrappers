@@ -188,6 +188,19 @@ export class Page extends RoamEntity {
         return rawPage ? new this(rawPage) : null
     }
 
+    static getOrCreate(name: string) {
+        return this.fromName(name) || this.new(name)
+    }
+
+    static async new(name: string) {
+        await window.roamAlphaAPI.createPage({
+            page: {
+                title: name,
+            },
+        })
+        return Page.fromName(name)!
+    }
+
     get text(): string {
         return this.rawPage[':node/title']
     }
