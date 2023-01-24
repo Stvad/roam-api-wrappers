@@ -4,19 +4,26 @@ import {Navigation} from './common/navigation'
 import {countBy} from 'lodash-es'
 
 import getBlockUidsReferencingPage from 'roamjs-components/queries/getBlockUidsReferencingPage'
+import getBlockUidsReferencingBlock from 'roamjs-components/queries/getBlockUidsReferencingBlock'
+import {nonNull} from '../utils/core'
 
 export const Roam = {
     query(query: string, ...params: any[]): any[] {
         return window.roamAlphaAPI.q(query, ...params)
     },
-    pull(id: number | string, selector = '[*]'): RawRoamPage | RawRoamBlock | null {
-        if (!id) {
+    pull(dbid: number | string, selector = '[*]'): RawRoamPage | RawRoamBlock | null {
+        if (!dbid) {
             console.log('bad id')
             return null
         }
         //@ts-ignore TODO reconcile types
-        return window.roamAlphaAPI.pull(selector, id)
+        return window.roamAlphaAPI.pull(selector, dbid)
     },
+
+    pullByUid(uid: string, selector = '[*]'): RawRoamPage | RawRoamBlock | null {
+        return this.pull(`[:block/uid "${uid}"]`, selector)
+    },
+
     queryFirst(query: string, ...params: any[]) {
         const results = this.query(query, ...params)
         if (!results?.[0] || results?.[0].length < 1) return null
@@ -46,6 +53,19 @@ function createAttributeString(name: string, value: string) {
 }
 
 export abstract class RoamEntity {
+
+    static fromUid(uid: string) {
+        const rawEntity = Roam.pullByUid(uid)
+        if (!rawEntity) return null
+
+        return RoamEntity.fromRaw(rawEntity)
+    }
+
+    static fromRaw(rawEntity: RawRoamBlock | RawRoamPage) {
+        if (rawEntity[':node/title']) return new Page(rawEntity)
+        return new Block(rawEntity as RawRoamBlock)
+    }
+
     constructor(readonly rawEntity: RawRoamBlock | RawRoamPage) {
         return new Proxy(this, {
             get(origin, property: keyof RoamEntity | string) {
@@ -70,6 +90,10 @@ export abstract class RoamEntity {
     get children(): Block[] {
         return this.rawChildren.map(it => new Block(it))
     }
+
+    abstract get parent(): RoamEntity | null
+
+    abstract get parents(): RoamEntity[]
 
     get uid(): string {
         return this.rawEntity[':block/uid']
@@ -115,7 +139,7 @@ export abstract class RoamEntity {
     async childAtPath(path: string[], createIfMissing = false): Promise<Block | null> {
         let block: Block | RoamEntity = this
         for (const part of path) {
-            const existing: Block | null =  block.childWithIndexOrValue(part)
+            const existing: Block | null = block.childWithIndexOrValue(part)
             if (existing) {
                 block = existing
                 continue
@@ -134,11 +158,18 @@ export abstract class RoamEntity {
         return result?.length ? result : null
     }
 
-    get linkedEntities(): (RawRoamPage | RawRoamBlock | null)[] | undefined {
-        // todo this has a mix of entities, it's not clear what this should return 🤔
-        // either figure out if it's a page or block and create & return a mixed array
-        // or have to 2 separate methods - one for block and one for pages
-        return this.rawEntity[':block/refs']?.map(it => Roam.pull(it[':db/id']))
+    get rawLinkedEntities(): (RawRoamPage | RawRoamBlock)[] {
+        return this.rawEntity[':block/refs']?.map(it => Roam.pull(it[':db/id'])).filter(nonNull) ?? []
+    }
+
+    get linkedEntities(): RoamEntity[] {
+        return this.getLinkedEntities()
+    }
+
+    getLinkedEntities(includeRefsFromParents: boolean = false): RoamEntity[] {
+        const local = this.rawLinkedEntities.map(it => RoamEntity.fromRaw(it))
+        const fromParents = includeRefsFromParents ? (this.parent?.getLinkedEntities(true) ?? []) : []
+        return [...local, ...fromParents]
     }
 
     setAttribute(name: string, value: string) {
@@ -169,6 +200,11 @@ export abstract class RoamEntity {
             },
         })
         return Block.fromUid(uid)!
+    }
+
+    get backlinks(): RoamEntity[] {
+        const backlinks = getBlockUidsReferencingBlock(this.uid)
+        return backlinks.map(it => RoamEntity.fromUid(it)).filter(nonNull)
     }
 }
 
@@ -210,6 +246,14 @@ export class Page extends RoamEntity {
                 title: value,
             },
         })
+    }
+
+    get parent(): RoamEntity | null {
+        return null
+    }
+
+    get parents(): RoamEntity[] {
+        return []
     }
 }
 
@@ -263,9 +307,7 @@ export class Block extends RoamEntity {
     }
 
     static fromUid(uid: string) {
-        //todo support things wrapped in parens
-        const rawBlock = Roam.queryFirst('[:find ?e :in $ ?a :where [?e :block/uid ?a]]', uid)
-        return rawBlock ? new Block(rawBlock as RawRoamBlock) : undefined
+        return RoamEntity.fromUid(uid) as Block
     }
 
     get text(): string {
@@ -279,6 +321,23 @@ export class Block extends RoamEntity {
                 string: value,
             },
         })
+    }
+
+    get parent(): RoamEntity | null {
+        const parentIds = this.rawBlock[':block/parents']
+        if (!parentIds) return null
+
+        const directParentId = parentIds[parentIds.length - 1]
+
+        const rawParent = directParentId && Roam.pull(directParentId[':db/id'])
+        return rawParent ? RoamEntity.fromRaw(rawParent) : null
+    }
+
+    get parents(): RoamEntity[] {
+        const parentIds = this.rawBlock[':block/parents']
+        if (!parentIds) return []
+
+        return parentIds.map(it => RoamEntity.fromRaw(Roam.pull(it[':db/id'])!))
     }
 
     get containerPage(): Page {
