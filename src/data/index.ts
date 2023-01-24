@@ -49,6 +49,8 @@ export abstract class RoamEntity {
     constructor(readonly rawEntity: RawRoamBlock | RawRoamPage) {
         return new Proxy(this, {
             get(origin, property: keyof RoamEntity | string) {
+                if (property in origin) return origin[property as keyof RoamEntity]
+
                 return origin.child(property)
             },
         })
@@ -89,18 +91,14 @@ export abstract class RoamEntity {
      * Todo potentially allow accessing the roam attributes without having to specify `::` at the end
      * Todo can i support regex selectors? - maybe. would require custom parsing though, everythign I get is a string =\
      */
-    child(property: keyof RoamEntity | string) {
+    child(property: string): Block | Block[] | null {
         const idx = parseInt(property)
         if (Number.isInteger(idx)) return this.children?.[idx]
 
-        if (property in this) {
-            return this[property as keyof RoamEntity]
-        } else {
-            //todo check for regex stuff explicitly
-            return this.childWithValue(property) ||
-                this.childrenMatching(new RegExp(`^${property}::`))?.[0] ||
-                this.childrenMatching(new RegExp(property))
-        }
+        //todo check for regex stuff explicitly
+        return this.childWithValue(property) ||
+            this.childrenMatching(new RegExp(`^${property}::`))?.[0] ||
+            this.childrenMatching(new RegExp(property))
     }
 
     childWithIndexOrValue(indexOrValue: string): Block | null {
