@@ -1,4 +1,5 @@
 import {Page, RoamEntity} from './index'
+import {ReferenceFilter} from './types'
 
 export const defaultExclusions = [
     /^ptr$/,
@@ -67,7 +68,6 @@ export const groupByMostCommonReferences = (
         // yep def want that!
         const linkedEntities = entity.getLinkedEntities(true)
         const references = linkedEntities.filter(notExcluded)
-        console.log({entity, references})
 
         for (const ref of references) {
             addReferenceToGroup(ref.uid, entity)
@@ -109,4 +109,14 @@ export const groupByMostCommonReferences = (
     }
 
     return new Map<string, RoamEntity[]>(result)
+}
+
+export function matchesFilter(entity: RoamEntity, filters: ReferenceFilter) {
+    console.log(entity?.rawEntity)
+    const refs = entity.getLinkedEntities(true)
+
+    const matchesAllIncludes = filters.includes.every((f) => refs.some((r) => r.text === f))
+    const matchesNoRemoves = filters.removes.every((f) => !refs.some((r) => r.text === f))
+
+    return matchesAllIncludes && matchesNoRemoves
 }

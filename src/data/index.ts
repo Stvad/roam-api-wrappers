@@ -6,6 +6,7 @@ import {countBy} from 'lodash-es'
 import getBlockUidsReferencingPage from 'roamjs-components/queries/getBlockUidsReferencingPage'
 import getBlockUidsReferencingBlock from 'roamjs-components/queries/getBlockUidsReferencingBlock'
 import {nonNull} from '../utils/core'
+import {ReferenceFilter} from './types'
 
 export const Roam = {
     query(query: string, ...params: any[]): any[] {
@@ -54,7 +55,7 @@ function createAttributeString(name: string, value: string) {
 
 export abstract class RoamEntity {
 
-    static fromUid(uid: string) {
+    static fromUid(uid: string): Page | Block | null {
         const rawEntity = Roam.pullByUid(uid)
         if (!rawEntity) return null
 
@@ -206,6 +207,8 @@ export abstract class RoamEntity {
         const backlinks = getBlockUidsReferencingBlock(this.uid)
         return backlinks.map(it => RoamEntity.fromUid(it)).filter(nonNull)
     }
+
+    abstract get referenceFilter(): ReferenceFilter
 }
 
 export class Page extends RoamEntity {
@@ -254,6 +257,11 @@ export class Page extends RoamEntity {
 
     get parents(): RoamEntity[] {
         return []
+    }
+
+    get referenceFilter(): ReferenceFilter {
+        //@ts-ignore todo types
+        return window.roamAlphaAPI.ui.filters.getPageLinkedRefsFilters({page: {title: this.text}})
     }
 }
 
@@ -374,4 +382,9 @@ export class Block extends RoamEntity {
         const valueStr = this.text.split('::')[1]?.trim()
         return valueStr?.split(splitRegex)?.filter(it => it) || []
     }
+
+    get referenceFilter(): ReferenceFilter {
+        throw new Error('Not supported by Roam')
+    }
 }
+export {matchesFilter} from './collection'
