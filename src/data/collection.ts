@@ -1,4 +1,4 @@
-import {RoamEntity} from './index'
+import {Page, RoamEntity} from './index'
 
 export const defaultExclusions = [
     /^ptr$/,
@@ -12,6 +12,9 @@ export const defaultExclusions = [
     /^isa$/,
     /^reflection$/,
 ]
+
+const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.includes('/')
+
 /**
  * what I want is something like:
  * - create groups based on the most common page reference among all entities, excluding the things like factor, interval, TODO, DONE, etc
@@ -26,6 +29,9 @@ export const groupByMostCommonReferences = (
     entities: RoamEntity[],
     dontGroupReferencesTo: RegExp[] = defaultExclusions,
 ) => {
+    // todo allow passing prioritized groups (e.g. `i`, that get assembled first if present),
+    //  though also need to make sure that they are later not filtered out if even below the size threshold)
+
     // todo to work as expected, this also needs to take parent references into the account
     // todo when we exclude all the things - just return one group
     // todo potentially special handling for hierarchies (e.g. wcs/x and wcs/y should be grouped together)
@@ -44,18 +50,31 @@ export const groupByMostCommonReferences = (
     const notExcluded = (entity: RoamEntity) =>
         !dontGroupReferencesTo.some(it => it.test(entity.text))
 
-    for (const entity of entities) {
-        // todo also potentially include the page it's on as it also counts as a reference
-        const linkedEntities = entity.getLinkedEntities(true)
-        const references = linkedEntities.filter(notExcluded)
-        console.log({entity, references})
-        const referenceUids = references.map(it => it.uid)
-
-        for (const uid of referenceUids) {
-            addReferenceToGroup(uid, entity)
+    function addReferencesFromHierarchy(ref: RoamEntity, entity: RoamEntity) {
+        if (isPartOfHierarchy(ref)) {
+            /**
+             * Hierarchy stuff is underdefined, but general heuristic is name/whatever -> name is top
+             * Nested hierarchies is a thing, not handling those for now
+             */
+            const topOfHierarchyName = ref.text.split('/')[0]
+            const topOfHierarchy = Page.fromName(topOfHierarchyName)
+            topOfHierarchy && addReferenceToGroup(topOfHierarchy.uid, entity)
         }
     }
 
+    for (const entity of entities) {
+        // todo also potentially include the page it's on as it also counts as a reference
+        // yep def want that!
+        const linkedEntities = entity.getLinkedEntities(true)
+        const references = linkedEntities.filter(notExcluded)
+        console.log({entity, references})
+
+        for (const ref of references) {
+            addReferenceToGroup(ref.uid, entity)
+            // in addition to hierarchy this should take types into account (isa::stuff)
+            addReferencesFromHierarchy(ref, entity)
+        }
+    }
 
     console.log({referenceGroups})
 
