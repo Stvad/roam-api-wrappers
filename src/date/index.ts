@@ -20,6 +20,7 @@ export const DAILY_NOTE_PAGE_TITLE_REGEX = new RegExp(
 
 export const RoamDate = {
     regex: DAILY_NOTE_PAGE_REGEX,
+    onlyPageTitleRegex: DAILY_NOTE_PAGE_TITLE_REGEX,
     referenceRegex: new RegExp(`\\[\\[${DAILY_NOTE_PAGE_REGEX.source}]]`, 'gm'),
     parse: parseRoamDate,
     toRoam: toRoamDate,

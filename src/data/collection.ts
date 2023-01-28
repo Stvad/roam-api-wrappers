@@ -1,5 +1,6 @@
 import {Page, RoamEntity} from './index'
 import {ReferenceFilter} from './types'
+import {RoamDate} from '../date'
 
 export const defaultExclusions = [
     /^ptr$/,
@@ -12,6 +13,7 @@ export const defaultExclusions = [
     /^\[\[interval]]:.+/,
     /^isa$/,
     /^reflection$/,
+    RoamDate.onlyPageTitleRegex,
 ]
 
 const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.includes('/')
@@ -37,6 +39,12 @@ export const groupByMostCommonReferences = (
     // todo when we exclude all the things - just return one group
     // todo how important is dedup? (would it actually be better to show a few larger groups that have overlap?)
     // todo merge groups that overlap exactly
+    const referenceGroups = buildReferenceGroups(entities, dontGroupReferencesTo)
+
+    return deduplicateAndSortGroups(referenceGroups)
+}
+
+function  buildReferenceGroups(entities: RoamEntity[], dontGroupReferencesTo: RegExp[]) {
     const referenceGroups = new Map<string, Map<string, RoamEntity>>()
 
     function addReferenceToGroup(referenceUid: string, entity: RoamEntity) {
@@ -72,7 +80,6 @@ export const groupByMostCommonReferences = (
 
     for (const entity of entities) {
         const linkedEntities = [...entity.getLinkedEntities(true), entity.page]
-        console.log({entity, linkedEntities})
         const references = linkedEntities.filter(notExcluded)
 
         for (const ref of references) {
@@ -82,41 +89,42 @@ export const groupByMostCommonReferences = (
             addReferencesFromAttribute(ref, entity, 'group with')
         }
     }
+    return referenceGroups
+}
 
-    console.log({referenceGroups})
-
-    /**
-     * take the largest group out, then remove all of its members from the unassignedEntities set
-     * and remove it's members from all other groups, which would rebalance the groups
-     * also a good place to find the wholly subsumed groups (they'd end up empty)
-     *
-     * given how this goes, probably doesn't really make sense to sort the sets or something, plausibly heap would help but also as likely to require too much updating
-     *
-     */
-
-        // const groups = Array.from(referenceGroups.values())
+/**
+ * take the largest group out,
+ * and remove its members from all other groups, which would re-balance the groups
+ * also a good place to find the wholly subsumed groups (they'd end up empty)
+ *
+ * given how this goes, probably doesn't really make sense to sort the sets or something, plausibly heap would help but also as likely to require too much updating
+ */
+function deduplicateAndSortGroups(referenceGroups: Map<string, Map<string, RoamEntity>>) {
     const result = []
 
     while (referenceGroups.size) {
-        const [referenceUid, group] = [...referenceGroups.entries()].reduce((a, b) => a[1].size > b[1].size ? a : b)
+        const [referenceUid, largestGroup] = pickLargest(referenceGroups)
 
-        const groupEntities = Array.from(group.values())
-        const groupEntitiesUids = group.keys()
-        result.push([referenceUid, groupEntities] as const)
+        result.push([referenceUid, Array.from(largestGroup.values())] as const)
+
+        referenceGroups.delete(referenceUid)
 
         for (const [_, group] of referenceGroups) {
             // todo remove empty groups
             if (group.size === 0) continue
 
-            for (const uid of groupEntitiesUids) {
+            for (const uid of largestGroup.keys()) {
                 group.delete(uid)
             }
         }
-        referenceGroups.delete(referenceUid)
     }
 
     return new Map<string, RoamEntity[]>(result)
 }
+
+const pickLargest = (referenceGroups: Map<string, Map<string, RoamEntity>>) =>
+    [...referenceGroups.entries()]
+        .reduce((a, b) => a[1].size > b[1].size ? a : b)
 
 export function matchesFilter(entity: RoamEntity, filters: ReferenceFilter) {
     const refs = entity.getLinkedEntities(true)
