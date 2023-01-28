@@ -35,8 +35,8 @@ export const groupByMostCommonReferences = (
 
     // todo to work as expected, this also needs to take parent references into the account
     // todo when we exclude all the things - just return one group
-    // todo potentially special handling for hierarchies (e.g. wcs/x and wcs/y should be grouped together)
     // todo how important is dedup? (would it actually be better to show a few larger groups that have overlap?)
+    // todo merge groups that overlap exactly
     const referenceGroups = new Map<string, Map<string, RoamEntity>>()
 
     function addReferenceToGroup(referenceUid: string, entity: RoamEntity) {
@@ -52,27 +52,34 @@ export const groupByMostCommonReferences = (
         !dontGroupReferencesTo.some(it => it.test(entity.text))
 
     function addReferencesFromHierarchy(ref: RoamEntity, entity: RoamEntity) {
-        if (isPartOfHierarchy(ref)) {
-            /**
-             * Hierarchy stuff is underdefined, but general heuristic is name/whatever -> name is top
-             * Nested hierarchies is a thing, not handling those for now
-             */
-            const topOfHierarchyName = ref.text.split('/')[0]
-            const topOfHierarchy = Page.fromName(topOfHierarchyName)
-            topOfHierarchy && addReferenceToGroup(topOfHierarchy.uid, entity)
-        }
+        if (!isPartOfHierarchy(ref)) return
+        /**
+         * Hierarchy stuff is underdefined, but general heuristic is name/whatever -> name is top
+         * Nested hierarchies is a thing, not handling those for now
+         */
+        const topOfHierarchyName = ref.text.split('/')[0]
+        const topOfHierarchy = Page.fromName(topOfHierarchyName)
+        topOfHierarchy && addReferenceToGroup(topOfHierarchy.uid, entity)
+    }
+
+    function addReferencesFromAttribute(baseReference: RoamEntity, entity: RoamEntity, attributte: string) {
+        const isNotAttributeReference = (it: RoamEntity) => it.text !== attributte
+
+        baseReference.firstAttributeBlock(attributte)
+            ?.linkedEntities.filter(isNotAttributeReference)
+            ?.forEach(ref => addReferenceToGroup(ref.uid, entity))
     }
 
     for (const entity of entities) {
-        // todo also potentially include the page it's on as it also counts as a reference
-        // yep def want that!
-        const linkedEntities = entity.getLinkedEntities(true)
+        const linkedEntities = [...entity.getLinkedEntities(true), entity.page]
+        console.log({entity, linkedEntities})
         const references = linkedEntities.filter(notExcluded)
 
         for (const ref of references) {
             addReferenceToGroup(ref.uid, entity)
             // in addition to hierarchy this should take types into account (isa::stuff)
             addReferencesFromHierarchy(ref, entity)
+            addReferencesFromAttribute(ref, entity, 'group with')
         }
     }
 
@@ -87,7 +94,7 @@ export const groupByMostCommonReferences = (
      *
      */
 
-    // const groups = Array.from(referenceGroups.values())
+        // const groups = Array.from(referenceGroups.values())
     const result = []
 
     while (referenceGroups.size) {
@@ -112,7 +119,6 @@ export const groupByMostCommonReferences = (
 }
 
 export function matchesFilter(entity: RoamEntity, filters: ReferenceFilter) {
-    console.log(entity?.rawEntity)
     const refs = entity.getLinkedEntities(true)
 
     const matchesAllIncludes = filters.includes.every((f) => refs.some((r) => r.text === f))

@@ -187,6 +187,15 @@ export abstract class RoamEntity {
         this.text = createAttributeString(name, value)
     }
 
+    firstAttributeBlock(name: string): Block | undefined {
+        return this.getAttributeBlocks(name)[0]
+    }
+
+    getAttributeBlocks(name: string): Block[] {
+        // todo roam actually parses the attributes separately, so I probably should use that
+        return this.childrenMatching(new RegExp(`^${name}::`)) ?? []
+    }
+
     async appendChild(text: string): Promise<Block> {
         const uid = window.roamAlphaAPI.util.generateUID()
         await window.roamAlphaAPI.createBlock({
@@ -209,6 +218,8 @@ export abstract class RoamEntity {
     }
 
     abstract get referenceFilter(): ReferenceFilter
+
+    abstract get page(): Page
 }
 
 export class Page extends RoamEntity {
@@ -262,6 +273,10 @@ export class Page extends RoamEntity {
     get referenceFilter(): ReferenceFilter {
         //@ts-ignore todo types
         return window.roamAlphaAPI.ui.filters.getPageLinkedRefsFilters({page: {title: this.text}})
+    }
+
+    get page(): Page {
+        return this
     }
 }
 
@@ -385,6 +400,10 @@ export class Block extends RoamEntity {
 
     get referenceFilter(): ReferenceFilter {
         throw new Error('Not supported by Roam')
+    }
+
+    get page(): Page {
+        return new Page(Roam.pull(this.rawBlock[':block/page'][':db/id'])!)!
     }
 }
 export {matchesFilter} from './collection'
