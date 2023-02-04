@@ -1,10 +1,12 @@
 import {Page, RoamEntity} from './index'
 import {ReferenceFilter} from './types'
 import {RoamDate} from '../date'
+import {groupBy} from 'lodash-es'
 
 export const defaultExclusions = [
     /^ptr$/,
     /^otter\.ai\/transcript$/,
+    /^otter\.ai$/,
     /^TODO$/,
     /^DONE$/,
     /^factor$/,
@@ -12,12 +14,21 @@ export const defaultExclusions = [
     /^\[\[factor]]:.+/,
     /^\[\[interval]]:.+/,
     /^isa$/,
-    /^reflection$/,
     RoamDate.onlyPageTitleRegex,
 ]
 
+export const defaultLowPriority = [
+    /^reflection$/,
+    /^task$/,
+    /^weekly review$/,
+    /^person$/,
+]
+
+type Priority = 'high' | 'default' | 'low'
+
 const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.includes('/')
 
+const defaultHighPriority = [/^i$/, /^sr$/]
 /**
  * what I want is something like:
  * - create groups based on the most common page reference among all entities, excluding the things like factor, interval, TODO, DONE, etc
@@ -31,20 +42,22 @@ const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.i
 export const groupByMostCommonReferences = (
     entities: RoamEntity[],
     dontGroupReferencesTo: RegExp[] = defaultExclusions,
+    groupPriorities: Record<Partial<'high' | 'low'>, RegExp[]> = {
+        low: [...defaultExclusions, ...defaultLowPriority],
+        high: defaultHighPriority,
+    },
+    addReferencesBasedOnAttributes: string[] = ['isa', 'group with'],
 ) => {
-    // todo allow passing prioritized groups (e.g. `i`, that get assembled first if present),
-    //  though also need to make sure that they are later not filtered out if even below the size threshold)
-
-    // todo to work as expected, this also needs to take parent references into the account
     // todo when we exclude all the things - just return one group
+
     // todo how important is dedup? (would it actually be better to show a few larger groups that have overlap?)
     // todo merge groups that overlap exactly
-    const referenceGroups = buildReferenceGroups(entities, dontGroupReferencesTo)
+    const referenceGroups = buildReferenceGroups(entities, addReferencesBasedOnAttributes, dontGroupReferencesTo)
 
-    return deduplicateAndSortGroups(referenceGroups)
+    return deduplicateAndSortGroups(referenceGroups, groupPriorities)
 }
 
-function  buildReferenceGroups(entities: RoamEntity[], dontGroupReferencesTo: RegExp[]) {
+function buildReferenceGroups(entities: RoamEntity[], addReferencesBasedOnAttributes: string[], dontGroupReferencesTo: RegExp[]) {
     const referenceGroups = new Map<string, Map<string, RoamEntity>>()
 
     function addReferenceToGroup(referenceUid: string, entity: RoamEntity) {
@@ -84,9 +97,9 @@ function  buildReferenceGroups(entities: RoamEntity[], dontGroupReferencesTo: Re
 
         for (const ref of references) {
             addReferenceToGroup(ref.uid, entity)
-            // in addition to hierarchy this should take types into account (isa::stuff)
             addReferencesFromHierarchy(ref, entity)
-            addReferencesFromAttribute(ref, entity, 'group with')
+
+            addReferencesBasedOnAttributes.forEach(attribute => addReferencesFromAttribute(ref, entity, attribute))
         }
     }
     return referenceGroups
@@ -99,28 +112,61 @@ function  buildReferenceGroups(entities: RoamEntity[], dontGroupReferencesTo: Re
  *
  * given how this goes, probably doesn't really make sense to sort the sets or something, plausibly heap would help but also as likely to require too much updating
  */
-function deduplicateAndSortGroups(referenceGroups: Map<string, Map<string, RoamEntity>>) {
-    const result = []
+function deduplicateAndSortGroups(
+    referenceGroups: Map<string, Map<string, RoamEntity>>,
+    groupPriorities: Record<'high' | 'low', RegExp[]>,
+) {
+    const groupsByPriorities = groupGroupsByPriorities(referenceGroups, groupPriorities) as Record<Priority, [string, Map<string, RoamEntity>][]>
+    console.log({groupsByPriorities})
 
-    while (referenceGroups.size) {
-        const [referenceUid, largestGroup] = pickLargest(referenceGroups)
+    const result: Array<readonly [string, RoamEntity[]]> = []
 
-        result.push([referenceUid, Array.from(largestGroup.values())] as const)
+    function consumeFrom(priorityGroup: Map<string, Map<string, RoamEntity>>, minGroupSize: number = 1) {
+        while (referenceGroups.size && priorityGroup.size) {
+            const [referenceUid, largestGroup] = pickLargest(priorityGroup)
+            if (largestGroup.size < minGroupSize) break
 
-        referenceGroups.delete(referenceUid)
+            result.push([referenceUid, Array.from(largestGroup.values())] as const)
 
-        for (const [_, group] of referenceGroups) {
-            // todo remove empty groups
-            if (group.size === 0) continue
+            priorityGroup.delete(referenceUid)
+            referenceGroups.delete(referenceUid)
 
-            for (const uid of largestGroup.keys()) {
-                group.delete(uid)
-            }
+            removeGroupEntriesFromOtherGroups(referenceGroups, largestGroup)
         }
     }
 
-    return new Map<string, RoamEntity[]>(result)
+    consumeFrom(new Map(groupsByPriorities.high))
+    consumeFrom(new Map(groupsByPriorities.default), 2)
+    consumeFrom(new Map(groupsByPriorities.low))
+
+    return new Map<string, RoamEntity[]>([...result, ...(referenceGroups as Iterable<readonly [string, RoamEntity[]]>)])
 }
+
+function removeGroupEntriesFromOtherGroups(
+    referenceGroups: Map<string, Map<string, RoamEntity>>,
+    largestGroup: Map<string, RoamEntity>,
+) {
+    for (const [_, group] of referenceGroups) {
+        // todo remove empty groups
+        if (group.size === 0) continue
+
+        for (const uid of largestGroup.keys()) {
+            group.delete(uid)
+        }
+    }
+}
+
+const groupGroupsByPriorities = (
+    referenceGroups: Map<string, Map<string, RoamEntity>>,
+    groupPriorities: Record<'high' | 'low', RegExp[]>,
+) =>
+    groupBy([...referenceGroups],
+        ([refUid]: [string, Map<string, RoamEntity>]): Priority => {
+            const ref = RoamEntity.fromUid(refUid)!
+            if (groupPriorities.high.some(it => it.test(ref.text))) return 'high'
+            if (groupPriorities.low.some(it => it.test(ref.text))) return 'low'
+            return 'default'
+        })
 
 const pickLargest = (referenceGroups: Map<string, Map<string, RoamEntity>>) =>
     [...referenceGroups.entries()]
