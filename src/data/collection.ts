@@ -24,11 +24,15 @@ export const defaultLowPriority = [
     /^person$/,
 ]
 
+const defaultHighPriority = [
+    /^i$/,
+    /^sr$/,
+    /^morning-task$/,
+]
+
 type Priority = 'high' | 'default' | 'low'
 
 const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.includes('/')
-
-const defaultHighPriority = [/^i$/, /^sr$/]
 /**
  * what I want is something like:
  * - create groups based on the most common page reference among all entities, excluding the things like factor, interval, TODO, DONE, etc
@@ -105,6 +109,8 @@ function buildReferenceGroups(entities: RoamEntity[], addReferencesBasedOnAttrib
     return referenceGroups
 }
 
+const getValues = (largestGroup: Map<string, RoamEntity>) => Array.from(largestGroup.values())
+
 /**
  * take the largest group out,
  * and remove its members from all other groups, which would re-balance the groups
@@ -126,7 +132,7 @@ function deduplicateAndSortGroups(
             const [referenceUid, largestGroup] = pickLargest(priorityGroup)
             if (largestGroup.size < minGroupSize) break
 
-            result.push([referenceUid, Array.from(largestGroup.values())] as const)
+            result.push([referenceUid, getValues(largestGroup)] as const)
 
             priorityGroup.delete(referenceUid)
             referenceGroups.delete(referenceUid)
@@ -139,7 +145,10 @@ function deduplicateAndSortGroups(
     consumeFrom(new Map(groupsByPriorities.default), 2)
     consumeFrom(new Map(groupsByPriorities.low))
 
-    return new Map<string, RoamEntity[]>([...result, ...(referenceGroups as Iterable<readonly [string, RoamEntity[]]>)])
+    // consume the rest
+    consumeFrom(referenceGroups)
+
+    return new Map<string, RoamEntity[]>([...result])
 }
 
 function removeGroupEntriesFromOtherGroups(
