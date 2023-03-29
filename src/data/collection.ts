@@ -14,6 +14,7 @@ export const defaultExclusions = [
     /^\[\[factor]]:.+/,
     /^\[\[interval]]:.+/,
     /^isa$/,
+    /^repeat interval$/,
     RoamDate.onlyPageTitleRegex,
 ]
 
@@ -28,6 +29,7 @@ const defaultHighPriority = [
     /^i$/,
     /^sr$/,
     /^morning-task$/,
+    /^TAP$/,
 ]
 
 type Priority = 'high' | 'default' | 'low'
@@ -91,7 +93,7 @@ function buildReferenceGroups(entities: RoamEntity[], addReferencesBasedOnAttrib
         const isNotAttributeReference = (it: RoamEntity) => it.text !== attributte
 
         baseReference.firstAttributeBlock(attributte)
-            ?.linkedEntities.filter(isNotAttributeReference)
+            ?.linkedEntities.filter(isNotAttributeReference).filter(notExcluded)
             ?.forEach(ref => addReferenceToGroup(ref.uid, entity))
     }
 
