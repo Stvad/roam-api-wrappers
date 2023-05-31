@@ -86,7 +86,7 @@ function buildReferenceGroups(entities: RoamEntity[], addReferencesBasedOnAttrib
          */
         const topOfHierarchyName = ref.text.split('/')[0]
         const topOfHierarchy = Page.fromName(topOfHierarchyName)
-        topOfHierarchy && addReferenceToGroup(topOfHierarchy.uid, entity)
+        topOfHierarchy && notExcluded(topOfHierarchy) && addReferenceToGroup(topOfHierarchy.uid, entity)
     }
 
     function addReferencesFromAttribute(baseReference: RoamEntity, entity: RoamEntity, attributte: string) {
