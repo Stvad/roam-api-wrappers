@@ -30,6 +30,7 @@ const defaultHighPriority = [
     /^sr$/,
     /^morning-task$/,
     /^TAP$/,
+    /^dating$/,
 ]
 
 type Priority = 'high' | 'default' | 'low'
