@@ -6,7 +6,7 @@ import {countBy} from 'lodash-es'
 import getBlockUidsReferencingPage from 'roamjs-components/queries/getBlockUidsReferencingPage'
 import getBlockUidsReferencingBlock from 'roamjs-components/queries/getBlockUidsReferencingBlock'
 import {nonNull} from '../utils/core'
-import {ReferenceFilter} from './types'
+import {BlockData, ReferenceFilter} from './types'
 
 export const Roam = {
     query(query: string, ...params: any[]): any[] {
@@ -196,7 +196,25 @@ export abstract class RoamEntity {
         return this.childrenMatching(new RegExp(`^${name}::`)) ?? []
     }
 
-    async appendChild(text: string): Promise<Block> {
+
+    /**
+     * Preferred version to use
+     */
+    async appendChild(childData: BlockData): Promise<Block>;
+    /**
+     * @deprecated use appendTextChild instead
+     */
+    async appendChild(childData: string): Promise<Block>;
+    async appendChild(childData: string | BlockData): Promise<Block> {
+        if (typeof childData === 'string') return this.appendTextChild(childData)
+
+        const childBlock = await this.appendTextChild(childData.text)
+        childData.children?.forEach(it => childBlock.appendChild(it))
+
+        return  childBlock
+    }
+
+    async appendTextChild(text: string): Promise<Block> {
         const uid = window.roamAlphaAPI.util.generateUID()
         await window.roamAlphaAPI.createBlock({
             location: {
@@ -406,4 +424,5 @@ export class Block extends RoamEntity {
         return new Page(Roam.pull(this.rawBlock[':block/page'][':db/id'])!)!
     }
 }
+
 export {matchesFilter} from './collection'
