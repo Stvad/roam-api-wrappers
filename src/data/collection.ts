@@ -15,6 +15,8 @@ export const defaultExclusions = [
     /^\[\[interval]]:.+/,
     /^isa$/,
     /^repeat interval$/,
+    /^make-public$/,
+    /^matrix-messages$/,
     RoamDate.onlyPageTitleRegex,
 ]
 
@@ -48,6 +50,8 @@ const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.i
  */
 export const groupByMostCommonReferences = (
     entities: RoamEntity[],
+    // plausibly this should be "really low priority" as in - after all possible other groups have been created
+    // don't leave things ungrouped if they can go into one of excluded categories
     dontGroupReferencesTo: RegExp[] = defaultExclusions,
     groupPriorities: Record<Partial<'high' | 'low'>, RegExp[]> = {
         low: [...defaultExclusions, ...defaultLowPriority],
