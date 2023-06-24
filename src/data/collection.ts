@@ -27,14 +27,6 @@ export const defaultLowPriority = [
     /^person$/,
 ]
 
-const defaultHighPriority = [
-    /^i$/,
-    /^sr$/,
-    /^morning-task$/,
-    /^TAP$/,
-    /^dating$/,
-]
-
 type Priority = 'high' | 'default' | 'low'
 
 const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.includes('/')
@@ -55,7 +47,7 @@ export const groupByMostCommonReferences = (
     dontGroupReferencesTo: RegExp[] = defaultExclusions,
     groupPriorities: Record<Partial<'high' | 'low'>, RegExp[]> = {
         low: [...defaultExclusions, ...defaultLowPriority],
-        high: defaultHighPriority,
+        high: [],
     },
     addReferencesBasedOnAttributes: string[] = ['isa', 'group with'],
 ) => {
