@@ -1,7 +1,7 @@
 import {Page, RoamEntity} from './index'
 import {ReferenceFilter} from './types'
 import {RoamDate} from '../date'
-import {groupBy} from 'lodash-es'
+import {groupBy, partition} from 'lodash-es'
 
 export const defaultExclusions = [
     /^ptr$/,
@@ -43,6 +43,10 @@ const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.i
  */
 export class CommonReferencesGrouper {
     constructor(
+        /**
+         * If it doesn't fit into any other group - put it here
+         */
+        private fallbackGroup: string,
         // plausibly this should be "really low priority" as in - after all possible other groups have been created
         // don't leave things ungrouped if they can go into one of excluded categories
         private dontGroupReferencesTo: RegExp[] = defaultExclusions,
@@ -54,7 +58,7 @@ export class CommonReferencesGrouper {
     ) {
     }
 
-    public group(entities: RoamEntity[]) {
+    public group(entities: RoamEntity[]): Map<string, RoamEntity[]> {
         // todo when we exclude all the things - just return one group
 
         // todo how important is dedup? (would it actually be better to show a few larger groups that have overlap?)
@@ -102,6 +106,8 @@ export class CommonReferencesGrouper {
         for (const entity of entities) {
             const linkedEntities = [...entity.getLinkedEntities(true), entity.page]
             const references = linkedEntities.filter(this.notExcluded.bind(this))
+
+            if (!references.length) addReferenceToGroup(this.fallbackGroup, entity)
 
             for (const ref of references) {
                 addReferenceToGroup(ref.uid, entity)
@@ -153,16 +159,13 @@ export class CommonReferencesGrouper {
     }
 }
 
-export const groupByMostCommonReferences = (
-    entities: RoamEntity[],
-    dontGroupReferencesTo: RegExp[] = defaultExclusions,
-    groupPriorities: Record<Partial<'high' | 'low'>, RegExp[]> = {
-        low: [...defaultExclusions, ...defaultLowPriority],
-        high: [],
-    },
-    addReferencesBasedOnAttributes: string[] = ['isa', 'group with'],
-) => {
-    return new CommonReferencesGrouper(dontGroupReferencesTo, groupPriorities, addReferencesBasedOnAttributes).group(entities)
+export const mergeGroupsSmallerThan = (referenceGroups: Map<string, RoamEntity[]>, intoKey: string, minGroupSize: number) => {
+    const [small, large] =
+        partition([...referenceGroups.entries()],
+            ([key, group]) => group.length < minGroupSize || key === intoKey)
+
+    const mergedItems = small.map(([_, group]) => group).flat()
+    return new Map([...large, [intoKey, mergedItems]])
 }
 
 const getValues = (largestGroup: Map<string, RoamEntity>) => Array.from(largestGroup.values())
