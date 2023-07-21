@@ -12,6 +12,7 @@ export type ReferenceFilter = { includes: string[]; removes: string[] }
  *     }
  */
 export interface BlockData {
-    text: string,
-    children?: BlockData[],
+    uid?: string
+    text: string
+    children?: BlockData[]
 }

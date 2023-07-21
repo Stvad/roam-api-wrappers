@@ -208,26 +208,26 @@ export abstract class RoamEntity {
     async appendChild(childData: string | BlockData): Promise<Block> {
         if (typeof childData === 'string') return this.appendTextChild(childData)
 
-        const childBlock = await this.appendTextChild(childData.text)
+        const childBlock = await this.appendTextChild(childData.text, childData.uid)
         childData.children?.forEach(it => childBlock.appendChild(it))
 
         return  childBlock
     }
 
-    async appendTextChild(text: string): Promise<Block> {
-        const uid = window.roamAlphaAPI.util.generateUID()
+    async appendTextChild(text: string, uid?: string): Promise<Block> {
+        const newUid = uid || window.roamAlphaAPI.util.generateUID()
         await window.roamAlphaAPI.createBlock({
             location: {
                 'parent-uid': this.uid,
-                //todo is this append?
+                //todo is this append? - nope it's prepend actually
                 order: -1,
             },
             block: {
                 string: text,
-                uid,
+                uid: newUid,
             },
         })
-        return Block.fromUid(uid)!
+        return Block.fromUid(newUid)!
     }
 
     get backlinks(): RoamEntity[] {
