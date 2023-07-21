@@ -159,10 +159,15 @@ export class CommonReferencesGrouper {
     }
 }
 
-export const mergeGroupsSmallerThan = (referenceGroups: Map<string, RoamEntity[]>, intoKey: string, minGroupSize: number) => {
+export const mergeGroupsSmallerThan = (
+    referenceGroups: Map<string, RoamEntity[]>,
+    intoKey: string,
+    minGroupSize: number,
+    dontMerge: (uid: string) => boolean,
+) => {
     const [small, large] =
         partition([...referenceGroups.entries()],
-            ([key, group]) => group.length < minGroupSize || key === intoKey)
+            ([key, group]) => !dontMerge(key) && (group.length < minGroupSize || key === intoKey))
 
     const mergedItems = small.map(([_, group]) => group).flat()
     return new Map([...large, [intoKey, mergedItems]])
