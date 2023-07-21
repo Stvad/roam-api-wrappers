@@ -169,7 +169,9 @@ export abstract class RoamEntity {
 
     getLinkedEntities(includeRefsFromParents: boolean = false): RoamEntity[] {
         const local = this.rawLinkedEntities.map(it => RoamEntity.fromRaw(it))
-        const fromParents = includeRefsFromParents ? (this.parent?.getLinkedEntities(true) ?? []) : []
+        const fromParents = includeRefsFromParents ?
+            (this.parents.flatMap(it => it?.getLinkedEntities() ?? [])) :
+            []
         return [...local, ...fromParents]
     }
 
@@ -211,7 +213,7 @@ export abstract class RoamEntity {
         const childBlock = await this.appendTextChild(childData.text, childData.uid)
         childData.children?.forEach(it => childBlock.appendChild(it))
 
-        return  childBlock
+        return childBlock
     }
 
     async appendTextChild(text: string, uid?: string): Promise<Block> {
@@ -368,6 +370,7 @@ export class Block extends RoamEntity {
         const parentIds = this.rawBlock[':block/parents']
         if (!parentIds) return null
 
+        // TODO: unreliable this ends up not being correct for Readwise created nodes 🤔
         const directParentId = parentIds[parentIds.length - 1]
 
         const rawParent = directParentId && Roam.pull(directParentId[':db/id'])
