@@ -29,7 +29,49 @@ export const defaultLowPriority = [
 
 type Priority = 'high' | 'default' | 'low'
 
-const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text.includes('/')
+const isPartOfHierarchy = (ref: RoamEntity) => ref instanceof Page && ref.text?.includes('/')
+
+export const getGroupsForEntity = (
+    entity: RoamEntity,
+    {
+    addReferencesBasedOnAttributes = ['isa', 'group with'],
+    dontGroupReferencesTo = defaultExclusions,
+}: {
+        addReferencesBasedOnAttributes?: string[],
+        dontGroupReferencesTo?: RegExp[],
+    } = {}
+): RoamEntity[] => {
+    const notExcluded = (entity: RoamEntity) => !dontGroupReferencesTo.some(it => it.test(entity.text))
+
+    const getReferencesFromHierarchy = (ref: RoamEntity) => {
+        if (!isPartOfHierarchy(ref)) return []
+        /**
+         * Hierarchy stuff is underdefined, but general heuristic is name/whatever -> name is top
+         * Nested hierarchies is a thing, not handling those for now
+         */
+        const topOfHierarchyName = ref.text.split('/')[0]
+        const topOfHierarchy = Page.fromName(topOfHierarchyName)
+        return topOfHierarchy && notExcluded(topOfHierarchy) ? [topOfHierarchy] : []
+    }
+
+    const getReferencesFromAttribute = (baseReference: RoamEntity, attribute: string) => {
+        const isNotAttributeReference = (it: RoamEntity) => it.text !== attribute
+
+        return baseReference.firstAttributeBlock(attribute)
+            ?.linkedEntities.filter(isNotAttributeReference).filter(notExcluded) ?? []
+    }
+
+    const getEntityGroupsFromReference = (reference: RoamEntity, entity: RoamEntity): RoamEntity[] => [
+        reference,
+        ...getReferencesFromHierarchy(reference),
+        ...addReferencesBasedOnAttributes.flatMap(attribute => getReferencesFromAttribute(reference, attribute)),
+    ]
+
+    const linkedEntities = [...entity.getLinkedEntities(true), entity.page]
+    const filteredReferences = linkedEntities.filter(notExcluded)
+
+    return filteredReferences.flatMap(reference => getEntityGroupsFromReference(reference, entity))
+}
 
 /**
  * what I want is something like:
@@ -68,10 +110,6 @@ export class CommonReferencesGrouper {
         return this.deduplicateAndSortGroups(referenceGroups)
     }
 
-    private notExcluded(entity: RoamEntity) {
-        return !this.dontGroupReferencesTo.some(it => it.test(entity.text))
-    }
-
     private buildReferenceGroups(entities: RoamEntity[]) {
         const referenceGroups = new Map<string, Map<string, RoamEntity>>()
 
@@ -84,37 +122,15 @@ export class CommonReferencesGrouper {
             }
         }
 
-        const addReferencesFromHierarchy = (ref: RoamEntity, entity: RoamEntity) => {
-            if (!isPartOfHierarchy(ref)) return
-            /**
-             * Hierarchy stuff is underdefined, but general heuristic is name/whatever -> name is top
-             * Nested hierarchies is a thing, not handling those for now
-             */
-            const topOfHierarchyName = ref.text.split('/')[0]
-            const topOfHierarchy = Page.fromName(topOfHierarchyName)
-            topOfHierarchy && this.notExcluded(topOfHierarchy) && addReferenceToGroup(topOfHierarchy.uid, entity)
-        }
-
-        const addReferencesFromAttribute = (baseReference: RoamEntity, entity: RoamEntity, attributte: string) => {
-            const isNotAttributeReference = (it: RoamEntity) => it.text !== attributte
-
-            baseReference.firstAttributeBlock(attributte)
-                ?.linkedEntities.filter(isNotAttributeReference).filter(this.notExcluded.bind(this))
-                ?.forEach(ref => addReferenceToGroup(ref.uid, entity))
-        }
-
         for (const entity of entities) {
-            const linkedEntities = [...entity.getLinkedEntities(true), entity.page]
-            const references = linkedEntities.filter(this.notExcluded.bind(this))
+            const groupsForEntity = getGroupsForEntity(entity,
+                {
+                    addReferencesBasedOnAttributes: this.addReferencesBasedOnAttributes,
+                    dontGroupReferencesTo: this.dontGroupReferencesTo,
+                })
+            groupsForEntity.forEach(ref => addReferenceToGroup(ref.uid, entity))
 
-            if (!references.length) addReferenceToGroup(this.fallbackGroup, entity)
-
-            for (const ref of references) {
-                addReferenceToGroup(ref.uid, entity)
-                addReferencesFromHierarchy(ref, entity)
-
-                this.addReferencesBasedOnAttributes.forEach(attribute => addReferencesFromAttribute(ref, entity, attribute))
-            }
+            if (!groupsForEntity.length) addReferenceToGroup(this.fallbackGroup, entity)
         }
         return referenceGroups
     }
