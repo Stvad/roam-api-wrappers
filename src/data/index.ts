@@ -8,6 +8,8 @@ import getBlockUidsReferencingBlock from 'roamjs-components/queries/getBlockUids
 import {nonNull} from '../utils/core'
 import {BlockData, ReferenceFilter} from './types'
 
+const DEFAULT_INSERT_ORDER = 'last'
+
 export const Roam = {
     query(query: string, ...params: any[]): any[] {
         return window.roamAlphaAPI.q(query, ...params)
@@ -210,26 +212,32 @@ export abstract class RoamEntity {
     async appendChild(childData: string | BlockData): Promise<Block> {
         if (typeof childData === 'string') return this.appendTextChild(childData)
 
-        const childBlock = await this.appendTextChild(childData.text, childData.uid)
-        childData.children?.forEach(it => childBlock.appendChild(it))
+        return this.insertChild(childData)
+    }
+
+    async insertChild(childData: BlockData): Promise<Block> {
+        const newUid = childData.uid || window.roamAlphaAPI.util.generateUID()
+        await window.roamAlphaAPI.createBlock({
+            location: {
+                'parent-uid': this.uid,
+                // @ts-ignore new thing
+                order: childData.order || DEFAULT_INSERT_ORDER,
+            },
+            block: {
+                string: childData.text,
+                uid: newUid,
+                open: childData.open,
+            },
+        })
+
+        const childBlock = Block.fromUid(newUid)
+        childData.children?.forEach(it => childBlock.insertChild(it))
 
         return childBlock
     }
 
     async appendTextChild(text: string, uid?: string): Promise<Block> {
-        const newUid = uid || window.roamAlphaAPI.util.generateUID()
-        await window.roamAlphaAPI.createBlock({
-            location: {
-                'parent-uid': this.uid,
-                //todo is this append? - nope it's prepend actually
-                order: -1,
-            },
-            block: {
-                string: text,
-                uid: newUid,
-            },
-        })
-        return Block.fromUid(newUid)!
+        return this.insertChild({text, uid})
     }
 
     get backlinks(): RoamEntity[] {

@@ -12,7 +12,9 @@ export type ReferenceFilter = { includes: string[]; removes: string[] }
  *     }
  */
 export interface BlockData {
-    uid?: string
     text: string
+    uid?: string
+    order?: number | 'first' | 'last' // Defaults to 'last'
     children?: BlockData[]
+    open?: boolean
 }
