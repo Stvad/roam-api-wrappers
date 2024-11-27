@@ -45,13 +45,11 @@ export const getGroupsForEntity = (
 
     const getReferencesFromHierarchy = (ref: RoamEntity) => {
         if (!isPartOfHierarchy(ref)) return []
-        /**
-         * Hierarchy stuff is underdefined, but general heuristic is name/whatever -> name is top
-         * Nested hierarchies is a thing, not handling those for now
-         */
-        const topOfHierarchyName = ref.text.split('/')[0]
-        const topOfHierarchy = Page.fromName(topOfHierarchyName)
-        return topOfHierarchy && notExcluded(topOfHierarchy) ? [topOfHierarchy] : []
+
+        return ref.text.split('/')
+            .slice(0, -1)
+            .map((_, i, arr) => Page.fromName(arr.slice(0, i + 1).join('/')))
+            .filter(levelReference => levelReference && notExcluded(levelReference)) as RoamEntity[]
     }
 
     const getReferencesFromAttribute = (baseReference: RoamEntity, attribute: string) => {
